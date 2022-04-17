@@ -81,12 +81,20 @@ var api_structure = &ApiNode{
 		},
 		&ApiNode{
 			node_name: "convert",
-			function:  convert_datetime,
+			function:  not_supported,
+			children: []*ApiNode{
+				&ApiNode{
+					node_name: "timezone",
+					function:  convert_timezone,
+				},
+				&ApiNode{
+					node_name: "format",
+					function:  convert_format,
+				},
+			},
 		},
 	},
 }
-
-var api_levels = []string{"1", "2"}
 
 func doc_page(res_wri http.ResponseWriter, requ *http.Request) {
 	welcome_message := `This is demo API time server.
@@ -185,7 +193,11 @@ func datetime_parsed(res_wri http.ResponseWriter, requ *http.Request) {
 	fmt.Fprintf(res_wri, string(output))
 }
 
-func convert_datetime(res_wri http.ResponseWriter, requ *http.Request) {
+func convert_timezone(res_wri http.ResponseWriter, requ *http.Request) {
+	fmt.Fprintf(res_wri, "Convert activated")
+}
+
+func convert_format(res_wri http.ResponseWriter, requ *http.Request) {
 	fmt.Fprintf(res_wri, "Convert activated")
 }
 
