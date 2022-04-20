@@ -63,7 +63,7 @@ var api_structure = &ApiNode{
 	children: []*ApiNode{
 		&ApiNode{
 			node_name: "now",
-			function:  not_supported,
+			function:  http.NotFound,
 			children: []*ApiNode{
 				&ApiNode{
 					node_name: "iso",
@@ -81,15 +81,19 @@ var api_structure = &ApiNode{
 		},
 		&ApiNode{
 			node_name: "convert",
-			function:  not_supported,
+			function:  http.NotFound,
 			children: []*ApiNode{
 				&ApiNode{
 					node_name: "timezone",
 					function:  convert_timezone,
 				},
 				&ApiNode{
+					node_name: "listtimezones",
+					function:  list_timezones,
+				},
+				&ApiNode{
 					node_name: "format",
-					function:  convert_format,
+					function:  convert_time_format,
 				},
 			},
 		},
@@ -111,7 +115,8 @@ Use the following endpoints for GET method:
 	query argument "tz" limit response to time zone
 	all arguments may be mixed no date/time/tz result default output of full datetime info
 Use the following endpoint for POST method:
-- /convert
+- /convert/timezone
+- /convert/format
     JSON data
 	{
 		"from_timestamp": ISO/UNIX_TIMESTAMP,
@@ -122,22 +127,16 @@ Use the following endpoint for POST method:
 	fmt.Fprintf(res_wri, welcome_message)
 }
 
-func not_supported(res_wri http.ResponseWriter, requ *http.Request) {
-	fmt.Fprintf(res_wri, "404 page not found")
-}
-
 func iso_datetime(res_wri http.ResponseWriter, requ *http.Request) {
 	iso_time := fmt.Sprintf("%v", time.Now())
 	out_data := map[string]string{"iso_datetime": iso_time}
-	output, _ := json.Marshal(out_data)
-	fmt.Fprintf(res_wri, string(output))
+	json.NewEncoder(res_wri).Encode(out_data)
 }
 
 func unix_timestamp(res_wri http.ResponseWriter, requ *http.Request) {
 	unix_ts := time.Now().Unix()
 	out_data := map[string]int64{"unix_timestamp": unix_ts}
-	output, _ := json.Marshal(out_data)
-	fmt.Fprintf(res_wri, string(output))
+	json.NewEncoder(res_wri).Encode(out_data)
 }
 
 func check_argument(ok_values []string, arg_to_check string) bool {
@@ -186,19 +185,65 @@ func datetime_parsed(res_wri http.ResponseWriter, requ *http.Request) {
 			Shift: tz_shift,
 		}
 	}
-	output, err := json.Marshal(out_data)
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Fprintf(res_wri, string(output))
+	json.NewEncoder(res_wri).Encode(out_data)
+}
+
+func list_timezones(res_wri http.ResponseWriter, requ *http.Request) {
+	tz_data, _ := os.ReadFile("timezones.dat")
+	tz_list := strings.Split(string(tz_data), "\n")
+	json.NewEncoder(res_wri).Encode(tz_list)
+}
+
+type OutDatetimeData struct {
+	Timezone       string
+	DatetimeString string
+}
+
+type InDatetimeData struct {
+	From_timezone  string
+	To_timezone    string
+	DatetimeString string
 }
 
 func convert_timezone(res_wri http.ResponseWriter, requ *http.Request) {
-	fmt.Fprintf(res_wri, "Convert activated")
+	var input_datetime InDatetimeData
+	var output_datetime OutDatetimeData
+	// datetime_layout := time.RFC3339
+	datetime_layout := "2006-01-02T15:04:05"
+	dec_err := json.NewDecoder(requ.Body).Decode(&input_datetime)
+	if dec_err != nil {
+		http.Error(res_wri, dec_err.Error(), http.StatusBadRequest)
+		return
+	}
+	from_location, f_loc_err := time.LoadLocation(input_datetime.From_timezone)
+	if f_loc_err != nil {
+		http.Error(res_wri, f_loc_err.Error(), http.StatusBadRequest)
+		return
+	}
+	to_location, t_loc_err := time.LoadLocation(input_datetime.To_timezone)
+	if t_loc_err != nil {
+		http.Error(res_wri, t_loc_err.Error(), http.StatusBadRequest)
+		return
+	}
+	date_time_to_convert, parse_err := time.ParseInLocation(
+		datetime_layout,
+		input_datetime.DatetimeString,
+		from_location,
+	)
+	if parse_err != nil {
+		fmt.Println(parse_err)
+		http.Error(res_wri, parse_err.Error(), http.StatusBadRequest)
+		return
+	}
+	converted_datetime := date_time_to_convert.In(to_location)
+	output_datetime.DatetimeString = converted_datetime.Format(datetime_layout)
+	output_datetime.Timezone = input_datetime.To_timezone
+	json.NewEncoder(res_wri).Encode(output_datetime)
+
 }
 
-func convert_format(res_wri http.ResponseWriter, requ *http.Request) {
-	fmt.Fprintf(res_wri, "Convert activated")
+func convert_time_format(res_wri http.ResponseWriter, requ *http.Request) {
+	fmt.Fprintf(res_wri, "Coming soon")
 }
 
 var router = mux.NewRouter().StrictSlash(true)
@@ -225,7 +270,20 @@ func handle_requests(net_intf string, net_port int) {
 	log.Fatal(http.ListenAndServe(web_intf, router))
 }
 
+// func testing_time_convertion() {
+// 	now := time.Now()
+// 	fmt.Println(now)
+// 	loc, err := time.LoadLocation("Europe/Warsaw")
+// 	if err != nil {
+// 		fmt.Println(err)
+// 	} else {
+// 		fmt.Println(loc)
+// 		fmt.Println(now.In(loc))
+// 	}
+// }
+
 func main() {
+	// testing_time_convertion()
 	config_filename := "config.yaml"
 	var config Configuration
 	config.Logging.File_name = "tserver.log"
