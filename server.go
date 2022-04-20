@@ -101,30 +101,8 @@ var api_structure = &ApiNode{
 }
 
 func doc_page(res_wri http.ResponseWriter, requ *http.Request) {
-	welcome_message := `This is demo API time server.
-Use the following endpoints for GET method:
-- /now/iso to get ISO formated datetime
-    query argument "outtz" allow to define time zone of received time data
-	default is return UTC
-- /now/unix to get unix timestamp
-    no query arguments are handled unix epoch is given as gmt
-- /now/parsed to receive all values separatelly in dictionary
-	query argument "outtz" allow to define time zone of received time data
-	query argument "date" limit response to date
-	query argument time limit response to time
-	query argument "tz" limit response to time zone
-	all arguments may be mixed no date/time/tz result default output of full datetime info
-Use the following endpoint for POST method:
-- /convert/timezone
-- /convert/format
-    JSON data
-	{
-		"from_timestamp": ISO/UNIX_TIMESTAMP,
-		"to_format": "ISO/UNIX_TIMESTAMP,
-		"to_tz"
-    }
-`
-	fmt.Fprintf(res_wri, welcome_message)
+	doc_data, _ := os.ReadFile("documentation.dat")
+	fmt.Fprintf(res_wri, string(doc_data))
 }
 
 func iso_datetime(res_wri http.ResponseWriter, requ *http.Request) {
@@ -208,7 +186,6 @@ type InDatetimeData struct {
 func convert_timezone(res_wri http.ResponseWriter, requ *http.Request) {
 	var input_datetime InDatetimeData
 	var output_datetime OutDatetimeData
-	// datetime_layout := time.RFC3339
 	datetime_layout := "2006-01-02T15:04:05"
 	dec_err := json.NewDecoder(requ.Body).Decode(&input_datetime)
 	if dec_err != nil {
@@ -270,20 +247,7 @@ func handle_requests(net_intf string, net_port int) {
 	log.Fatal(http.ListenAndServe(web_intf, router))
 }
 
-// func testing_time_convertion() {
-// 	now := time.Now()
-// 	fmt.Println(now)
-// 	loc, err := time.LoadLocation("Europe/Warsaw")
-// 	if err != nil {
-// 		fmt.Println(err)
-// 	} else {
-// 		fmt.Println(loc)
-// 		fmt.Println(now.In(loc))
-// 	}
-// }
-
 func main() {
-	// testing_time_convertion()
 	config_filename := "config.yaml"
 	var config Configuration
 	config.Logging.File_name = "tserver.log"

@@ -1,0 +1,24 @@
+This is demo API time server.
+Use the following endpoints for GET method:
+- /now/iso to get ISO formated datetime
+    query argument "outtz" allow to define time zone of received time data
+	default is return UTC
+- /now/unix to get unix timestamp
+    no query arguments are handled unix epoch is given as gmt
+- /now/parsed to receive all values separatelly in dictionary
+	query argument "outtz" allow to define time zone of received time data
+	query argument "date" limit response to date
+	query argument time limit response to time
+	query argument "tz" limit response to time zone
+	all arguments may be mixed no date/time/tz result default output of full datetime info
+- /convert/timezone
+    Request Body example
+    {
+        "DatetimeString": "2022-04-19T22:23:24",
+        "From_timezone": "Europe/Warsaw",
+        "To_timezone": "America/Los_Angeles"
+    }
+- /convert/timezone_list
+    Returns list of timezones names
+- /convert/format
+	
