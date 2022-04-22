@@ -18,7 +18,6 @@ Use the following endpoints for GET method:
         "From_timezone": "Europe/Warsaw",
         "To_timezone": "America/Los_Angeles"
     }
-- /convert/timezone_list
+- /convert/listtimezones
     Returns list of timezones names
-- /convert/format
 	
