@@ -61,37 +61,37 @@ var api_structure = &ApiNode{
 	node_name: "",
 	function:  doc_page,
 	children: []*ApiNode{
-		&ApiNode{
+		{
 			node_name: "now",
 			function:  http.NotFound,
 			children: []*ApiNode{
-				&ApiNode{
+				{
 					node_name: "iso",
 					function:  iso_datetime,
 				},
-				&ApiNode{
+				{
 					node_name: "unix",
 					function:  unix_timestamp,
 				},
-				&ApiNode{
+				{
 					node_name: "parsed",
 					function:  datetime_parsed,
 				},
 			},
 		},
-		&ApiNode{
+		{
 			node_name: "convert",
 			function:  http.NotFound,
 			children: []*ApiNode{
-				&ApiNode{
+				{
 					node_name: "timezone",
 					function:  convert_timezone,
 				},
-				&ApiNode{
+				{
 					node_name: "listtimezones",
 					function:  list_timezones,
 				},
-				&ApiNode{
+				{
 					node_name: "format",
 					function:  convert_time_format,
 				},
