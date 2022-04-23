@@ -51,6 +51,10 @@ type Configuration struct {
 	}
 }
 
+type ErrorMessage struct {
+	Error_message string `json:"error_message"`
+}
+
 type ApiNode struct {
 	node_name string
 	function  func(res_wri http.ResponseWriter, requ *http.Request)
@@ -91,24 +95,38 @@ var api_structure = &ApiNode{
 					node_name: "listtimezones",
 					function:  list_timezones,
 				},
-				{
-					node_name: "format",
-					function:  convert_time_format,
-				},
 			},
 		},
 	},
 }
 
 func doc_page(res_wri http.ResponseWriter, requ *http.Request) {
-	doc_data, _ := os.ReadFile("documentation.dat")
+	doc_data, _ := os.ReadFile("documentation.html")
 	fmt.Fprintf(res_wri, string(doc_data))
 }
 
+func wrong_timezone_message(tz_name string) string {
+	return fmt.Sprintf("Wrong timezone name given '%v' please use /convert/listtimezones endpoint to get list of valid timezones", tz_name)
+}
+
 func iso_datetime(res_wri http.ResponseWriter, requ *http.Request) {
-	iso_time := fmt.Sprintf("%v", time.Now())
-	out_data := map[string]string{"iso_datetime": iso_time}
-	json.NewEncoder(res_wri).Encode(out_data)
+	url_vars := requ.URL.Query()
+	out_tz := url_vars.Get("outtz")
+	if out_tz == "" {
+		out_tz = "UTC"
+	}
+	out_location, out_tz_err := time.LoadLocation(out_tz)
+	if out_tz_err == nil {
+		iso_time := fmt.Sprintf("%v", time.Now().In(out_location))
+		out_data := map[string]string{"iso_datetime": iso_time}
+		json.NewEncoder(res_wri).Encode(out_data)
+	} else {
+		error_message := wrong_timezone_message(out_tz)
+		var out_data ErrorMessage = ErrorMessage{
+			Error_message: error_message,
+		}
+		json.NewEncoder(res_wri).Encode(out_data)
+	}
 }
 
 func unix_timestamp(res_wri http.ResponseWriter, requ *http.Request) {
@@ -124,6 +142,11 @@ func check_argument(ok_values []string, arg_to_check string) bool {
 	return false
 }
 
+func load_timezones() []string {
+	tz_data, _ := os.ReadFile("timezones.dat")
+	return strings.Split(string(tz_data), "\n")
+}
+
 func datetime_parsed(res_wri http.ResponseWriter, requ *http.Request) {
 	url_vars := requ.URL.Query()
 	send_markers := []string{"1", "yes", "on", "true"}
@@ -133,42 +156,50 @@ func datetime_parsed(res_wri http.ResponseWriter, requ *http.Request) {
 	send_time := check_argument(send_markers, time_req)
 	tz_req := strings.ToLower(url_vars.Get("tz"))
 	send_tz := check_argument(send_markers, tz_req)
-	// if no query argument than default behaviour is to send all data
-	if !send_date && !send_time && !send_tz {
-		send_date = true
-		send_time = true
-		send_tz = true
-	}
-	time_now := time.Now()
-	tz_name, tz_shift := time_now.Zone()
-	out_data := DateTimeInfo{}
-	if send_date {
-		out_data.Datedata = &DateInfo{
-			Year:  time_now.Year(),
-			Month: int(time_now.Month()),
-			Day:   time_now.Day(),
+	out_tz := url_vars.Get("outtz")
+	out_location, out_tz_err := time.LoadLocation(out_tz)
+	if out_tz_err == nil {
+		// if no query argument than default behaviour is to send all data
+		if !send_date && !send_time && !send_tz {
+			send_date = true
+			send_time = true
+			send_tz = true
 		}
-	}
-	if send_time {
-		out_data.Timedata = &TimeInfo{
-			Hour:        time_now.Hour(),
-			Minute:      time_now.Minute(),
-			Second:      time_now.Second(),
-			Nano_second: float32(time_now.Nanosecond()),
+		time_now := time.Now().In(out_location)
+		tz_name, tz_shift := time_now.Zone()
+		out_data := DateTimeInfo{}
+		if send_date {
+			out_data.Datedata = &DateInfo{
+				Year:  time_now.Year(),
+				Month: int(time_now.Month()),
+				Day:   time_now.Day(),
+			}
 		}
-	}
-	if send_tz {
-		out_data.Tzdata = &TimeZoneInfo{
-			Name:  tz_name,
-			Shift: tz_shift,
+		if send_time {
+			out_data.Timedata = &TimeInfo{
+				Hour:        time_now.Hour(),
+				Minute:      time_now.Minute(),
+				Second:      time_now.Second(),
+				Nano_second: float32(time_now.Nanosecond()),
+			}
 		}
+		if send_tz {
+			out_data.Tzdata = &TimeZoneInfo{
+				Name:  tz_name,
+				Shift: tz_shift,
+			}
+		}
+		json.NewEncoder(res_wri).Encode(out_data)
+	} else {
+		var out_data ErrorMessage
+		err_message := wrong_timezone_message(out_tz)
+		out_data.Error_message = err_message
+		json.NewEncoder(res_wri).Encode(out_data)
 	}
-	json.NewEncoder(res_wri).Encode(out_data)
 }
 
 func list_timezones(res_wri http.ResponseWriter, requ *http.Request) {
-	tz_data, _ := os.ReadFile("timezones.dat")
-	tz_list := strings.Split(string(tz_data), "\n")
+	tz_list := load_timezones()
 	json.NewEncoder(res_wri).Encode(tz_list)
 }
 
@@ -217,10 +248,6 @@ func convert_timezone(res_wri http.ResponseWriter, requ *http.Request) {
 	output_datetime.Timezone = input_datetime.To_timezone
 	json.NewEncoder(res_wri).Encode(output_datetime)
 
-}
-
-func convert_time_format(res_wri http.ResponseWriter, requ *http.Request) {
-	fmt.Fprintf(res_wri, "Coming soon")
 }
 
 var router = mux.NewRouter().StrictSlash(true)
