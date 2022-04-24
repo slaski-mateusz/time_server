@@ -2,16 +2,24 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
 	"golang.org/x/exp/slices"
 	"gopkg.in/yaml.v2"
+)
+
+const (
+	MIN_TCP_PORT = 0
+	MAX_TCP_PORT = 65535
 )
 
 type DateInfo struct {
@@ -98,6 +106,26 @@ var api_structure = &ApiNode{
 			},
 		},
 	},
+}
+
+type OutDatetimeData struct {
+	Timezone       string
+	DatetimeString string
+}
+
+type InDatetimeData struct {
+	From_timezone  string
+	To_timezone    string
+	DatetimeString string
+}
+
+func Contains[T comparable](sl []T, el T) bool {
+	for _, val := range sl {
+		if val == el {
+			return true
+		}
+	}
+	return false
 }
 
 func doc_page(res_wri http.ResponseWriter, requ *http.Request) {
@@ -203,17 +231,6 @@ func list_timezones(res_wri http.ResponseWriter, requ *http.Request) {
 	json.NewEncoder(res_wri).Encode(tz_list)
 }
 
-type OutDatetimeData struct {
-	Timezone       string
-	DatetimeString string
-}
-
-type InDatetimeData struct {
-	From_timezone  string
-	To_timezone    string
-	DatetimeString string
-}
-
 func convert_timezone(res_wri http.ResponseWriter, requ *http.Request) {
 	var input_datetime InDatetimeData
 	var output_datetime OutDatetimeData
@@ -274,22 +291,139 @@ func handle_requests(net_intf string, net_port int) {
 	log.Fatal(http.ListenAndServe(web_intf, router))
 }
 
+func default_configuration() Configuration {
+	var ret_conf Configuration
+	ret_conf.Logging.File_name = "tserver.log"
+	ret_conf.Logging.Unit = "k"
+	ret_conf.Logging.Size = 100
+	ret_conf.Logging.Files = 10
+	ret_conf.Web.Netintf = "127.0.0.1"
+	ret_conf.Web.Port = 8888
+	return ret_conf
+}
+
+func print_default_configuration() {
+	fmt.Println("\nUsing default configuration:")
+	def_conf, _ := yaml.Marshal(default_configuration())
+	fmt.Println(string(def_conf))
+}
+
+func valid_configuration(ctv Configuration) (bool, error) {
+	var available_units = []string{"M", "k"}
+	conf_valid := true
+	var err_messages []string
+	if !Contains(available_units, ctv.Logging.Unit) {
+		conf_valid = false
+		err_messages = append(
+			err_messages,
+			fmt.Sprintf(
+				"Logging configuration file size unit '%v' is not allowed unit: %v",
+				ctv.Logging.Unit,
+				strings.Join(available_units, ", "),
+			),
+		)
+	}
+	if ctv.Web.Port < MIN_TCP_PORT || ctv.Web.Port > MAX_TCP_PORT {
+		conf_valid = false
+		err_messages = append(
+			err_messages,
+			fmt.Sprintf(
+				"Configured API port %v is not in allowed range from %v to %v",
+				ctv.Web.Port,
+				MIN_TCP_PORT,
+				MAX_TCP_PORT,
+			),
+		)
+	}
+	int_addr_splitted := strings.Split(ctv.Web.Netintf, ".")
+	if len(int_addr_splitted) != 4 {
+		conf_valid = false
+		err_messages = append(
+			err_messages,
+			fmt.Sprintf(
+				"Interface IP address '%v' is not A.B.C.D pattern",
+				ctv.Web.Netintf,
+			),
+		)
+	} else {
+		for oi, octet := range int_addr_splitted {
+			octint, sti_err := strconv.ParseInt(octet, 0, 8)
+			if sti_err != nil {
+				conf_valid = false
+				err_messages = append(
+					err_messages,
+					fmt.Sprintf(
+						"%v octet '%v' of address is not integer value",
+						oi,
+						octet,
+					),
+				)
+			} else {
+				if octint < 1 || octint > 254 {
+					conf_valid = false
+					err_messages = append(
+						err_messages,
+						fmt.Sprintf(
+							"%v octet '%v' of address is out of range 1~254",
+							oi,
+							octet,
+						),
+					)
+				}
+			}
+		}
+	}
+	return conf_valid, errors.New(strings.Join(err_messages, ", "))
+}
+
 func main() {
-	config_filename := "config.yaml"
+	// Starting with default builtin configuration
+	config_filename := flag.String(
+		"conf_file",
+		"config.yaml",
+		"Configuration file name",
+	)
+	flag.Parse()
+	config_in_file, read_err := os.ReadFile(*config_filename)
 	var config Configuration
-	config.Logging.File_name = "tserver.log"
-	config.Logging.Unit = "k"
-	config.Logging.Size = 100
-	config.Logging.Files = 10
-	config.Web.Netintf = "0.0.0.0"
-	config.Web.Port = 8888
-	config_in_file, read_err := os.ReadFile(config_filename)
 	var config_from_file Configuration
+	var config_to_check Configuration
 	if read_err == nil {
 		unm_err := yaml.Unmarshal(config_in_file, &config_from_file)
 		if unm_err == nil {
-			config = config_from_file
+			config_to_check = config_from_file
+		} else {
+			fmt.Printf(
+				"Problem with parsing YAML in configuration file '%v': '%v'\n",
+				*config_filename,
+				unm_err,
+			)
+			fmt.Println("File content:")
+			fmt.Println(string(config_in_file))
+		}
+	} else {
+		fmt.Printf(
+			"Problem with reading configuration file '%v': '%v'\n",
+			*config_filename,
+			read_err,
+		)
+	}
+	if config_to_check != (Configuration{}) {
+		if cv, cv_err := valid_configuration(config_to_check); cv {
+			config = config_to_check
+		} else {
+			fmt.Printf(
+				"Configuration file content '%v' issue: '%v'\n",
+				*config_filename,
+				cv_err,
+			)
+
 		}
 	}
-	handle_requests(config.Web.Netintf, config.Web.Port)
+	if config != (Configuration{}) {
+		handle_requests(config.Web.Netintf, config.Web.Port)
+	} else {
+		fmt.Println("Not able to run with provided configuration")
+	}
+
 }

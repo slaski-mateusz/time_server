@@ -1,0 +1,8 @@
+logging:
+  file_name: time_server.log
+  unit: M
+  size: 2
+  files: 5
+web:
+  netintf: Interface
+  port: 8888
