@@ -48,14 +48,14 @@ type DateTimeInfo struct {
 
 type Configuration struct {
 	Logging struct {
-		File_name string `yaml:"file_name,omitempty"`
-		Unit      string `yaml:"unit,omitempty"`
-		Size      int    `yaml:"size,omitempty"`
-		Files     int    `yaml:"files,omitempty"`
+		FileName string `yaml:"file_name,omitempty"`
+		Unit     string `yaml:"unit,omitempty"`
+		Size     uint   `yaml:"size,omitempty"`
+		Files    uint   `yaml:"files,omitempty"`
 	}
 	Web struct {
-		Netintf string `yaml:"netintf,omitempty"`
-		Port    int    `yaml:"port,omitempty"`
+		NetIntf string `yaml:"netintf,omitempty"`
+		Port    uint   `yaml:"port,omitempty"`
 	}
 }
 
@@ -285,7 +285,7 @@ func activate_api_node(in_uri string, node *ApiNode) {
 	}
 }
 
-func handle_requests(net_intf string, net_port int) {
+func handle_requests(net_intf string, net_port uint) {
 	activate_api_node("", api_structure)
 	webIntf := fmt.Sprintf("%v:%v", net_intf, net_port)
 	log.Fatal(http.ListenAndServe(webIntf, router))
@@ -293,19 +293,18 @@ func handle_requests(net_intf string, net_port int) {
 
 func default_configuration() Configuration {
 	var returnConf Configuration
-	returnConf.Logging.File_name = "tserver.log"
+	returnConf.Logging.FileName = "tserver.log"
 	returnConf.Logging.Unit = "k"
 	returnConf.Logging.Size = 100
 	returnConf.Logging.Files = 10
-	returnConf.Web.Netintf = "127.0.0.1"
+	returnConf.Web.NetIntf = "127.0.0.1"
 	returnConf.Web.Port = 8888
 	return returnConf
 }
 
-func print_default_configuration() {
-	fmt.Println("\nUsing default configuration:")
-	defConf, _ := yaml.Marshal(default_configuration())
-	fmt.Println(string(defConf))
+func print_configuration(cnf Configuration) {
+	cnfBy, _ := yaml.Marshal(cnf)
+	fmt.Println(string(cnfBy))
 }
 
 func valid_configuration(ctv Configuration) (bool, error) {
@@ -323,6 +322,15 @@ func valid_configuration(ctv Configuration) (bool, error) {
 			),
 		)
 	}
+	if ctv.Logging.Files < 1 {
+		confValid = false
+		errMessages = append(
+			errMessages,
+			fmt.Sprintf(
+				"Provided number of log files '%v' must be minimum 1.",
+			),
+		)
+	}
 	if ctv.Web.Port < MIN_TCP_PORT || ctv.Web.Port > MAX_TCP_PORT {
 		confValid = false
 		errMessages = append(
@@ -335,14 +343,14 @@ func valid_configuration(ctv Configuration) (bool, error) {
 			),
 		)
 	}
-	int_addr_splitted := strings.Split(ctv.Web.Netintf, ".")
+	int_addr_splitted := strings.Split(ctv.Web.NetIntf, ".")
 	if len(int_addr_splitted) != 4 {
 		confValid = false
 		errMessages = append(
 			errMessages,
 			fmt.Sprintf(
 				"Interface IP address '%v' is not A.B.C.D pattern",
-				ctv.Web.Netintf,
+				ctv.Web.NetIntf,
 			),
 		)
 	} else {
@@ -359,12 +367,12 @@ func valid_configuration(ctv Configuration) (bool, error) {
 					),
 				)
 			} else {
-				if octint < 1 || octint > 254 {
+				if octint < 0 || octint > 254 {
 					confValid = false
 					errMessages = append(
 						errMessages,
 						fmt.Sprintf(
-							"%v octet '%v' of address is out of range 1~254",
+							"%v octet '%v' of address is out of range 0~254",
 							oi,
 							octet,
 						),
@@ -373,24 +381,30 @@ func valid_configuration(ctv Configuration) (bool, error) {
 			}
 		}
 	}
-	return confValid, errors.New(strings.Join(errMessages, ", "))
+	return confValid, errors.New(strings.Join(errMessages, "\n"))
 }
 
 func main() {
-	// Starting with default builtin configuration
+	defConfFilename := "config.yaml"
 	configFileName := flag.String(
 		"conf_file",
-		"config.yaml",
+		"",
 		"Configuration file name",
 	)
 	flag.Parse()
+	if *configFileName == "" {
+		fmt.Println("Configuration filename not given as command line parameter. Trying use file config.yaml.")
+		configFileName = &defConfFilename
+	}
 	configInFile, readErr := os.ReadFile(*configFileName)
 	var config Configuration
 	var configFromFile Configuration
 	var configToCheck Configuration
 	if readErr == nil {
+		fmt.Printf("Able to read file '%s'\n", *configFileName)
 		unmErr := yaml.Unmarshal(configInFile, &configFromFile)
 		if unmErr == nil {
+			fmt.Printf("Able to parse file '%s' content\n", *configFileName)
 			configToCheck = configFromFile
 		} else {
 			fmt.Printf(
@@ -420,10 +434,11 @@ func main() {
 
 		}
 	}
-	if config != (Configuration{}) {
-		handle_requests(config.Web.Netintf, config.Web.Port)
-	} else {
-		fmt.Println("Not able to run with provided configuration")
+	if config == (Configuration{}) {
+		config = default_configuration()
+		fmt.Println("Not able to run with provided configuration.")
+		fmt.Println("Starting with below default buildin configuration")
 	}
-
+	print_configuration(config)
+	handle_requests(config.Web.NetIntf, config.Web.Port)
 }
