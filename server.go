@@ -69,9 +69,9 @@ type ApiNode struct {
 	children []*ApiNode
 }
 
-var api_structure = &ApiNode{
+var apiStructure = &ApiNode{
 	nodeName: "",
-	function: doc_page,
+	function: docPage,
 	children: []*ApiNode{
 		{
 			nodeName: "now",
@@ -79,15 +79,15 @@ var api_structure = &ApiNode{
 			children: []*ApiNode{
 				{
 					nodeName: "iso",
-					function: iso_datetime,
+					function: isoDatetime,
 				},
 				{
 					nodeName: "unix",
-					function: unix_timestamp,
+					function: unixTimestamp,
 				},
 				{
 					nodeName: "parsed",
-					function: datetime_parsed,
+					function: datetimeParsed,
 				},
 			},
 		},
@@ -97,11 +97,11 @@ var api_structure = &ApiNode{
 			children: []*ApiNode{
 				{
 					nodeName: "timezone",
-					function: convert_timezone,
+					function: convertTimezone,
 				},
 				{
 					nodeName: "listtimezones",
-					function: list_timezones,
+					function: listTimezones,
 				},
 			},
 		},
@@ -128,16 +128,16 @@ func Contains[T comparable](sl []T, el T) bool {
 	return false
 }
 
-func doc_page(resWri http.ResponseWriter, requ *http.Request) {
+func docPage(resWri http.ResponseWriter, requ *http.Request) {
 	docData, _ := os.ReadFile("documentation.html")
 	fmt.Fprintf(resWri, string(docData))
 }
 
-func wrong_timezone_message(tz_name string) string {
-	return fmt.Sprintf("Wrong timezone name given '%v' please use /convert/listtimezones endpoint to get list of valid timezones", tz_name)
+func wrongTimezoneMessage(tzName string) string {
+	return fmt.Sprintf("Wrong timezone name given '%v' please use /convert/listtimezones endpoint to get list of valid timezones", tzName)
 }
 
-func iso_datetime(resWri http.ResponseWriter, requ *http.Request) {
+func isoDatetime(resWri http.ResponseWriter, requ *http.Request) {
 	urlVars := requ.URL.Query()
 	outTz := urlVars.Get("outtz")
 	if outTz == "" {
@@ -149,7 +149,7 @@ func iso_datetime(resWri http.ResponseWriter, requ *http.Request) {
 		outData := map[string]string{"iso_datetime": isoTime}
 		json.NewEncoder(resWri).Encode(outData)
 	} else {
-		errorMessage := wrong_timezone_message(outTz)
+		errorMessage := wrongTimezoneMessage(outTz)
 		var outData ErrorMessage = ErrorMessage{
 			ErrorMessage: errorMessage,
 		}
@@ -157,33 +157,33 @@ func iso_datetime(resWri http.ResponseWriter, requ *http.Request) {
 	}
 }
 
-func unix_timestamp(resWri http.ResponseWriter, requ *http.Request) {
+func unixTimestamp(resWri http.ResponseWriter, requ *http.Request) {
 	unixTs := time.Now().Unix()
 	outData := map[string]int64{"unix_timestamp": unixTs}
 	json.NewEncoder(resWri).Encode(outData)
 }
 
-func check_argument(ok_values []string, arg_to_check string) bool {
-	if slices.Contains(ok_values, arg_to_check) {
+func checkArgument(okValues []string, argToCheck string) bool {
+	if slices.Contains(okValues, argToCheck) {
 		return true
 	}
 	return false
 }
 
-func load_timezones() []string {
+func loadTimezones() []string {
 	tzData, _ := os.ReadFile("timezones.dat")
 	return strings.Split(string(tzData), "\n")
 }
 
-func datetime_parsed(resWri http.ResponseWriter, requ *http.Request) {
+func datetimeParsed(resWri http.ResponseWriter, requ *http.Request) {
 	urlVars := requ.URL.Query()
 	sendMarkers := []string{"1", "yes", "on", "true"}
 	dateReq := strings.ToLower(urlVars.Get("date"))
-	sendDate := check_argument(sendMarkers, dateReq)
+	sendDate := checkArgument(sendMarkers, dateReq)
 	timeReq := strings.ToLower(urlVars.Get("time"))
-	sendTime := check_argument(sendMarkers, timeReq)
+	sendTime := checkArgument(sendMarkers, timeReq)
 	tzReq := strings.ToLower(urlVars.Get("tz"))
-	sendTz := check_argument(sendMarkers, tzReq)
+	sendTz := checkArgument(sendMarkers, tzReq)
 	outTz := urlVars.Get("outtz")
 	outLocation, outTzErr := time.LoadLocation(outTz)
 	if outTzErr == nil {
@@ -220,18 +220,18 @@ func datetime_parsed(resWri http.ResponseWriter, requ *http.Request) {
 		json.NewEncoder(resWri).Encode(outData)
 	} else {
 		var outData ErrorMessage
-		errMessage := wrong_timezone_message(outTz)
+		errMessage := wrongTimezoneMessage(outTz)
 		outData.ErrorMessage = errMessage
 		json.NewEncoder(resWri).Encode(outData)
 	}
 }
 
-func list_timezones(resWri http.ResponseWriter, requ *http.Request) {
-	tzList := load_timezones()
+func listTimezones(resWri http.ResponseWriter, requ *http.Request) {
+	tzList := loadTimezones()
 	json.NewEncoder(resWri).Encode(tzList)
 }
 
-func convert_timezone(resWri http.ResponseWriter, requ *http.Request) {
+func convertTimezone(resWri http.ResponseWriter, requ *http.Request) {
 	var inputDatetime InDatetimeData
 	var outputDatetime OutDatetimeData
 	datetimeLayout := "2006-01-02T15:04:05"
@@ -269,29 +269,29 @@ func convert_timezone(resWri http.ResponseWriter, requ *http.Request) {
 
 var router = mux.NewRouter().StrictSlash(true)
 
-func activate_api_node(in_uri string, node *ApiNode) {
+func activateApiNode(inUri string, node *ApiNode) {
 	var nodeUri string
 	if node.nodeName == "" {
 		nodeUri = "/"
 	} else {
 		nodeUri = fmt.Sprintf("%v/", node.nodeName)
 	}
-	apiUri := in_uri + nodeUri
+	apiUri := inUri + nodeUri
 	if node.function != nil {
 		router.HandleFunc(apiUri, node.function)
 	}
 	for _, child := range node.children {
-		activate_api_node(apiUri, child)
+		activateApiNode(apiUri, child)
 	}
 }
 
-func handle_requests(net_intf string, net_port uint) {
-	activate_api_node("", api_structure)
-	webIntf := fmt.Sprintf("%v:%v", net_intf, net_port)
+func handleRequests(netIntf string, netPort uint) {
+	activateApiNode("", apiStructure)
+	webIntf := fmt.Sprintf("%v:%v", netIntf, netPort)
 	log.Fatal(http.ListenAndServe(webIntf, router))
 }
 
-func default_configuration() Configuration {
+func defaultConfiguration() Configuration {
 	var returnConf Configuration
 	returnConf.Logging.FileName = "tserver.log"
 	returnConf.Logging.Unit = "k"
@@ -302,12 +302,12 @@ func default_configuration() Configuration {
 	return returnConf
 }
 
-func print_configuration(cnf Configuration) {
+func printConfiguration(cnf Configuration) {
 	cnfBy, _ := yaml.Marshal(cnf)
 	fmt.Println(string(cnfBy))
 }
 
-func valid_configuration(ctv Configuration) (bool, error) {
+func validConfiguration(ctv Configuration) (bool, error) {
 	var availableUnits = []string{"M", "k"}
 	confValid := true
 	var errMessages []string
@@ -343,8 +343,8 @@ func valid_configuration(ctv Configuration) (bool, error) {
 			),
 		)
 	}
-	int_addr_splitted := strings.Split(ctv.Web.NetIntf, ".")
-	if len(int_addr_splitted) != 4 {
+	intAddrSplitted := strings.Split(ctv.Web.NetIntf, ".")
+	if len(intAddrSplitted) != 4 {
 		confValid = false
 		errMessages = append(
 			errMessages,
@@ -354,7 +354,7 @@ func valid_configuration(ctv Configuration) (bool, error) {
 			),
 		)
 	} else {
-		for oi, octet := range int_addr_splitted {
+		for oi, octet := range intAddrSplitted {
 			octint, stiErr := strconv.ParseInt(octet, 0, 8)
 			if stiErr != nil {
 				confValid = false
@@ -423,7 +423,7 @@ func main() {
 		)
 	}
 	if configToCheck != (Configuration{}) {
-		if cv, cvErr := valid_configuration(configToCheck); cv {
+		if cv, cvErr := validConfiguration(configToCheck); cv {
 			config = configToCheck
 		} else {
 			fmt.Printf(
@@ -435,10 +435,10 @@ func main() {
 		}
 	}
 	if config == (Configuration{}) {
-		config = default_configuration()
+		config = defaultConfiguration()
 		fmt.Println("Not able to run with provided configuration.")
 		fmt.Println("Starting with below default buildin configuration")
 	}
-	print_configuration(config)
-	handle_requests(config.Web.NetIntf, config.Web.Port)
+	printConfiguration(config)
+	handleRequests(config.Web.NetIntf, config.Web.Port)
 }
