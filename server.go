@@ -327,7 +327,7 @@ func valid_configuration(ctv Configuration) (bool, error) {
 		errMessages = append(
 			errMessages,
 			fmt.Sprintf(
-				"Provided number of log files '%v' must be minimum 1.",
+				"Provided number of log files '%v' must be minimum 1.", ctv.Logging.Files,
 			),
 		)
 	}
